@@ -1,4 +1,5 @@
 # Steve Baskauf 2017-07-05 Freely available under a GNU GPLv3 license. 
+# Added individual file load 2017-10-24
 # By its nature, this software overwrites and deletes data, so use at your own risk. 
 # See https://github.com/baskaufs/guid-o-matic/blob/master/rdf-mover.md for usage notes.
 
@@ -101,20 +102,38 @@ baseToTripleButton.grid(column=4, row=14, sticky=W)
 
 ttk.Label(mainframe, textvariable=emptyText).grid(column=3, row=15, sticky=(W, E))
 
+rdfFileMessage = StringVar()
+ttk.Label(mainframe, textvariable=rdfFileMessage).grid(column=4, row=16, sticky=(W, E))
+rdfFileMessage.set('Substitute "https://rawgit.com/" for "https://raw.githubusercontent.com/" to get correct RDF content-type based on file extension. Avoid excessive traffic!')
+
+rdfFileText = StringVar()
+ttk.Label(mainframe, textvariable=rdfFileText).grid(column=3, row=17, sticky=(W, E))
+rdfFileText.set('RDF file URI')
+rdfFileBox = ttk.Entry(mainframe, width = 100, textvariable = StringVar())
+rdfFileBox.grid(column=4, row=17, sticky=W)
+rdfFileBox.insert(END, 'https://rawgit.com/HeardLibrary/semantic-web/master/2016-fall/p0fp7wv.ttl')
+
+def moveFileButtonClick():
+	moveFile(rdfFileBox.get(), endpointUriBox.get(), graphNameBox.get(), passwordBox2.get())
+moveFileButton = ttk.Button(mainframe, text = "Load file into named graph", width = 30, command = lambda: moveFileButtonClick() )
+moveFileButton.grid(column=4, row=18, sticky=W)
+
+ttk.Label(mainframe, textvariable=emptyText).grid(column=3, row=19, sticky=(W, E))
+
 def dropGraphButtonClick():
 	dropGraph(endpointUriBox.get(), graphNameBox.get(), passwordBox2.get())
 dropGraphButton = ttk.Button(mainframe, text = "Drop (delete) graph", width = 30, command = lambda: dropGraphButtonClick() )
-dropGraphButton.grid(column=4, row=16, sticky=W)
+dropGraphButton.grid(column=4, row=20, sticky=W)
 
-ttk.Label(mainframe, textvariable=emptyText).grid(column=3, row=17, sticky=(W, E))
+ttk.Label(mainframe, textvariable=emptyText).grid(column=3, row=21, sticky=(W, E))
 
 logText = StringVar()
-ttk.Label(mainframe, textvariable=logText).grid(column=3, row=18, sticky=(W, E))
+ttk.Label(mainframe, textvariable=logText).grid(column=3, row=22, sticky=(W, E))
 logText.set('Action log')
 #scrolling text box hacked from https://www.daniweb.com/programming/software-development/code/492625/exploring-tkinter-s-scrolledtext-widget-python
 edit_space = tkst.ScrolledText(master = mainframe, width  = 100, height = 25)
 # the padx/pady space will form a frame
-edit_space.grid(column=4, row=18, padx=8, pady=8)
+edit_space.grid(column=4, row=22, padx=8, pady=8)
 edit_space.insert(END, '')
 
 def updateLog(message):
@@ -179,7 +198,7 @@ def buildLinkedMetadataXml(httpPath, csvData, fieldDelimiter):
 			xmlData = xmlData + '    ' + '<suffix1>' + row[tags.index('suffix1')] + '</suffix1>' + "\n"
 			xmlData = xmlData + '    ' + '<link_characters>' + row[tags.index('link_characters')] + '</link_characters>' + "\n"
 			xmlData = xmlData + '    ' + '<suffix2>' + row[tags.index('suffix2')] + '</suffix2>' + "\n"
-			xmlData = xmlData + '    ' + '<class>' + row[tags.index('class')] + '</class>' + "\n"
+			xmlData = xmlData + '    ' + '<forward_link>' + row[tags.index('forward_link')] + '</forward_link>' + "\n"
 			fileName = row[tags.index('filename')]
 			fileNameRoot = fileName[0:fileName.find('.')]
 			csvSubData = getCsvObject(httpPath, fileNameRoot + '-classes.csv', ',')
@@ -258,29 +277,28 @@ def dataToBasex(githubRepo, repoSubpath, database, basexServerUri, pwd):
 	writeDatabaseFile(databaseWritePath, 'linked-classes.xml', body, pwd)
 	updateLog('Ready')
 
-def dataToTriplestore(dumpUri, database, endpointUri, graphName, pwd):
-	updateCommand = 'LOAD <' + dumpUri + database + '> INTO GRAPH <' + graphName + '>'
-
-	updateLog('update SPARQL endpoint into graph ' + graphName)
-	
+def performSparqlUpdate(endpointUri, pwd, updateCommand):
 	# SPARQL Update requires HTTP POST
 	hdr = {'Content-Type' : 'application/sparql-update'}
 	r = requests.post(endpointUri, auth=('admin', pwd), headers=hdr, data = updateCommand)
 	updateLog(str(r.status_code) + ' ' + r.url + '\n')
 	updateLog(r.text + '\n')
-	updateLog('Ready')
+	updateLog('Ready')	
+
+def dataToTriplestore(dumpUri, database, endpointUri, graphName, pwd):
+	updateCommand = 'LOAD <' + dumpUri + database + '> INTO GRAPH <' + graphName + '>'
+	updateLog('update SPARQL endpoint into graph ' + graphName)
+	performSparqlUpdate(endpointUri, pwd, updateCommand)
+
+def moveFile(rdfFileUri, endpointUri, graphName, pwd):
+	updateCommand = 'LOAD <' + rdfFileUri + '> INTO GRAPH <' + graphName + '>'
+	updateLog('move file ' + rdfFileUri + ' into graph ' + graphName)
+	performSparqlUpdate(endpointUri, pwd, updateCommand)
 
 def dropGraph(endpointUri, graphName, pwd):
 	updateCommand = 'DROP GRAPH <' + graphName + '>'
-	
 	updateLog('drop graph ' + graphName)
-	
-	# SPARQL Update requires HTTP POST
-	hdr = {'Content-Type' : 'application/sparql-update'}
-	r = requests.post(endpointUri, auth=('admin', pwd), headers=hdr, data = updateCommand)
-	updateLog(str(r.status_code) + ' ' + r.url + '\n')
-	updateLog(r.text + '\n')
-	updateLog('Ready')
+	performSparqlUpdate(endpointUri, pwd, updateCommand)
 
 def main():	
 	root.mainloop()
